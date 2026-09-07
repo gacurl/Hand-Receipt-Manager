@@ -797,6 +797,24 @@ class ReturnBatchTests(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertTrue((response.headers.get("Location") or "").endswith("/return#queue-section"))
 
+    def test_return_scan_lands_on_return_placement_with_default_home_destination(self) -> None:
+        self._insert_slot(26, "HOME-RETURN", 1, None)
+        self._insert_asset("RT-PLACEMENT-1", location_type="IN_CUSTODY", holder_id=5, home_slot_id=26)
+
+        response = self.client.post(
+            "/",
+            data={"scan_text": "RT-PLACEMENT-1", "return_to": "/return"},
+            follow_redirects=True,
+        )
+        html = response.data.decode("utf-8")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('<div class="return-flow-section" id="queue-section">', html)
+        self.assertIn("<h3>Return Placement</h3>", html)
+        self.assertLess(html.index("<h3>Queue</h3>"), html.index('id="queue-section"'))
+        self.assertIn("RT-PLACEMENT-1</code> home: HOME-RETURN / 1", html)
+        self.assertIn('<option value="26" selected>HOME-RETURN / 1</option>', html)
+
     def test_return_to_alternate_empty_slot_preserves_home_and_receipt_evidence(self) -> None:
         self._insert_holder(19, "Temporary Return Holder", email="temporary-return@example.org")
         self._insert_slot(110, "HOME-CASE", 1, "HOME-OCCUPANT")
