@@ -3984,27 +3984,7 @@ def _update_admin_asset_in_tx(
         if asset.get("slot_number") != next_slot_number:
             changed_fields["slot_number"] = next_slot_number
 
-    if location_type == "STORAGE" and current_slot_id != target_slot_id:
-        if current_slot_id is not None:
-            conn.execute("DELETE FROM slot_occupancy WHERE asset_id = ?;", (asset_id,))
-            conn.execute("UPDATE slots SET current_asset_tag = NULL WHERE id = ?;", (current_slot_id,))
-        if target_slot_id is not None:
-            conn.execute(
-                """
-                INSERT INTO slot_occupancy (slot_id, asset_id, assigned_at)
-                VALUES (?, ?, ?);
-                """,
-                (target_slot_id, asset_id, now_iso),
-            )
-            conn.execute(
-                """
-                UPDATE slots
-                SET current_asset_tag = ?
-                WHERE id = ?;
-                """,
-                (asset_tag, target_slot_id),
-            )
-    elif location_type not in {"STORAGE", "IN_CUSTODY", ""}:
+    if location_type not in {"STORAGE", "IN_CUSTODY", ""}:
         raise ValueError("Asset location_type is not supported for admin edit.")
 
     update_clauses: list[str] = []
@@ -4021,55 +4001,6 @@ def _update_admin_asset_in_tx(
             f"UPDATE assets SET {', '.join(update_clauses)} WHERE id = ?;",
             tuple(update_values),
         )
-
-    if current_slot_id != target_slot_id:
-        if location_type == "STORAGE" and current_slot_id is None and selected_slot is not None:
-            payload = {
-                "slot_id": target_slot_id,
-                "case_number": str(selected_slot["case_name"]),
-                "slot_number": int(selected_slot["slot_position"]),
-                "building": building,
-                "room": room,
-                "equipment_type": equipment_type,
-            }
-            conn.execute(
-                """
-                INSERT INTO asset_events (
-                    asset_tag,
-                    event_type,
-                    event_date,
-                    actor,
-                    notes,
-                    payload,
-                    holder_id
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?);
-                """,
-                (asset_tag, "SLOT_ASSIGN", now_iso, actor, notes, json.dumps(payload), None),
-            )
-        else:
-            payload = {
-                "from_slot_id": current_slot_id,
-                "to_slot_id": target_slot_id,
-                "case_number": None if selected_slot is None else str(selected_slot["case_name"]),
-                "slot_number": None if selected_slot is None else int(selected_slot["slot_position"]),
-                "location_type": location_type,
-            }
-            conn.execute(
-                """
-                INSERT INTO asset_events (
-                    asset_tag,
-                    event_type,
-                    event_date,
-                    actor,
-                    notes,
-                    payload,
-                    holder_id
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?);
-                """,
-                (asset_tag, "ASSET_UPDATED", now_iso, actor, notes, json.dumps(payload), asset.get("current_holder_id")),
-            )
 
     metadata_payload = dict(changed_fields)
     if metadata_payload:

@@ -240,7 +240,7 @@ class AdminEditAssetUiTests(unittest.TestCase):
         self.assertIn(b"RETIRED \xe2\x80\x94 Not in service", response.data)
         self.assertNotIn(b"Retired / disposed", response.data)
 
-    def test_edit_storage_asset_moves_slot_and_persists_fields(self) -> None:
+    def test_edit_storage_asset_updates_home_without_moving_physical_occupancy(self) -> None:
         self._insert_slot(201, "CASE-A", 1)
         self._insert_slot(202, "CASE-B", 2)
         asset_id = self._insert_asset(
@@ -289,11 +289,11 @@ class AdminEditAssetUiTests(unittest.TestCase):
         self.assertEqual(asset_row["slot_number"], "2")
 
         occ = self.conn.execute("SELECT slot_id FROM slot_occupancy WHERE asset_id = ?;", (asset_id,)).fetchone()
-        self.assertEqual(occ["slot_id"], 202)
+        self.assertEqual(occ["slot_id"], 201)
         old_slot = self.conn.execute("SELECT current_asset_tag FROM slots WHERE id = 201;").fetchone()
         new_slot = self.conn.execute("SELECT current_asset_tag FROM slots WHERE id = 202;").fetchone()
-        self.assertIsNone(old_slot["current_asset_tag"])
-        self.assertEqual(new_slot["current_asset_tag"], "AT-EDIT-1")
+        self.assertEqual(old_slot["current_asset_tag"], "AT-EDIT-1")
+        self.assertIsNone(new_slot["current_asset_tag"])
 
         events = self.conn.execute(
             """
@@ -307,6 +307,68 @@ class AdminEditAssetUiTests(unittest.TestCase):
         self.assertTrue(any(row["event_type"] == "ASSET_UPDATED" for row in events))
         payloads = [json.loads(row["payload"]) for row in events if row["payload"]]
         self.assertTrue(any(payload.get("home_slot_id") == 202 for payload in payloads))
+
+    def test_edit_asset_shows_home_and_current_physical_location_separately(self) -> None:
+        self._insert_slot(701, "HOME-CASE", 1)
+        self._insert_slot(702, "PHYSICAL-CASE", 2)
+        asset_id = self._insert_asset(
+            "AT-EDIT-ALT-RETURN",
+            serial_number="SER-EDIT-ALT-RETURN",
+            location_type="STORAGE",
+            current_holder_id=None,
+            home_slot_id=701,
+            case_number="HOME-CASE",
+            slot_number="1",
+        )
+        self._occupy_slot(702, asset_id, "AT-EDIT-ALT-RETURN")
+
+        loaded = self.client.get("/admin/assets/edit?asset_tag=AT-EDIT-ALT-RETURN")
+
+        self.assertEqual(loaded.status_code, 200)
+        self.assertIn(b"Current Physical Location", loaded.data)
+        self.assertIn(b'id="current_physical_location" aria-readonly="true"', loaded.data)
+        self.assertIn(b"PHYSICAL-CASE / Slot 2", loaded.data)
+        self.assertIn(b"Home Location", loaded.data)
+        self.assertIn(b"HOME-CASE / Slot 1", loaded.data)
+        self.assertIn(b'value="701"', loaded.data)
+
+        updated = self.client.post(
+            "/admin/assets/edit",
+            data={
+                "action": "update",
+                "lookup_asset_tag": "AT-EDIT-ALT-RETURN",
+                "asset_tag": "AT-EDIT-ALT-RETURN",
+                "serial_number": "SER-EDIT-ALT-RETURN",
+                "manufacturer": "Lenovo",
+                "equipment_type": "laptop",
+                "building": "HQ",
+                "room": "110",
+                "model": "Latitude",
+                "model_code": "5400",
+                "notes": "metadata only",
+                "case_name": "HOME-CASE",
+                "slot_id": "701",
+            },
+        )
+
+        self.assertEqual(updated.status_code, 302)
+        asset = self.conn.execute(
+            "SELECT home_slot_id, case_number, slot_number FROM assets WHERE id = ?;", (asset_id,)
+        ).fetchone()
+        self.assertEqual(asset["home_slot_id"], 701)
+        self.assertEqual(asset["case_number"], "HOME-CASE")
+        self.assertEqual(asset["slot_number"], "1")
+        occupancy = self.conn.execute("SELECT slot_id FROM slot_occupancy WHERE asset_id = ?;", (asset_id,)).fetchone()
+        self.assertEqual(occupancy["slot_id"], 702)
+        physical_slot = self.conn.execute("SELECT current_asset_tag FROM slots WHERE id = 702;").fetchone()
+        home_slot = self.conn.execute("SELECT current_asset_tag FROM slots WHERE id = 701;").fetchone()
+        self.assertEqual(physical_slot["current_asset_tag"], "AT-EDIT-ALT-RETURN")
+        self.assertIsNone(home_slot["current_asset_tag"])
+        events = self.conn.execute(
+            "SELECT event_type FROM asset_events WHERE asset_tag = ? ORDER BY id;",
+            ("AT-EDIT-ALT-RETURN",),
+        ).fetchall()
+        self.assertEqual([event["event_type"] for event in events], ["ASSET_UPDATED"])
 
     def test_edit_allows_blank_manufacturer(self) -> None:
         asset_id = self._insert_asset(

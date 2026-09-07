@@ -145,7 +145,17 @@
             <input class="form-input" type="text" id="notes" name="notes" value="{{ form.notes or '' }}" />
           </div>
           <div class="row form-group">
-            <label class="form-label" for="case_name"><strong>case</strong></label>
+            <label class="form-label"><strong>Current Physical Location</strong></label>
+            <div class="form-input" id="current_physical_location" aria-readonly="true">
+              {% if asset.current_slot %}
+                {{ asset.current_slot.case_name }} / Slot {{ asset.current_slot.slot_position }}
+              {% else %}
+                Unslotted
+              {% endif %}
+            </div>
+          </div>
+          <div class="row form-group">
+            <label class="form-label" for="case_name"><strong>Home Location — case</strong></label>
             <select class="form-select" id="case_name" name="case_name">
               <option value="">Unassigned</option>
               {% for case_name in case_options %}
@@ -154,7 +164,7 @@
             </select>
           </div>
           <div class="row form-group">
-            <label class="form-label" for="slot_id"><strong>slot</strong></label>
+            <label class="form-label" for="slot_id"><strong>Home Location — slot</strong></label>
             <select class="form-select" id="slot_id" name="slot_id">
               <option value="">Unassigned</option>
               {% for slot in slot_options %}
