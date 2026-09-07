@@ -397,7 +397,7 @@
 
       </div>
 
-      <div class="return-flow-section" id="queue-section">
+      <div class="return-flow-section">
         <h3>Queue</h3>
         {% if queue %}
           <p class="return-queue-summary">{{ queue_len }} staged return{% if queue_len != 1 %}s{% endif %}</p>
@@ -424,7 +424,7 @@
       </div>
 
       {% if return_destination_rows is defined and return_destination_rows %}
-        <div class="return-flow-section">
+        <div class="return-flow-section" id="queue-section">
           <h3>Return Placement</h3>
           <p>Home slot is permanent. Select the current physical return destination before review.</p>
           {% for row in return_destination_rows %}
