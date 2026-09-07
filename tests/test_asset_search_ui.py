@@ -173,6 +173,8 @@ class AssetSearchUiTests(unittest.TestCase):
         self.assertIn(b"Laptop", response.data)
         self.assertIn(b"Issued to Alex Holder (Field Ops)", response.data)
         self.assertIn(b"Alex Holder (Field Ops)", response.data)
+        self.assertIn(b"<th>Home location</th>", response.data)
+        self.assertNotIn(b"<th>Assigned location</th>", response.data)
         self.assertIn(b"Home slot: CASE-A, Slot 4", response.data)
         self.assertIn(b"No movement proof recorded", response.data)
         self.assertIn(b'href="/assets/history?asset_tag=AT-100', response.data)
